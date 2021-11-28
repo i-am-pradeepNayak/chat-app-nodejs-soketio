@@ -4,8 +4,7 @@ const express = require("express");
 const socketio = require("socket.io");
 const Filter = require("bad-words");
 const { generateMessage, generateLocationMessage } = require("./time");
-const { removeUser, getUsersInRoom, addUser ,getUser } = require("./users");
-
+const { removeUser, getUsersInRoom, addUser, getUser } = require("./users");
 
 const app = express();
 const server = http.createServer(app);
@@ -19,13 +18,20 @@ app.use(express.static(publicDirectoryPath));
 io.on("connection", (socket) => {
   console.log("New WebSocket connection");
 
-
-
   //room connection
-  socket.on("join", ({ username, room }) => {
-    socket.join(room)
-    socket.emit("message", generateMessage("Welcome"));
-    socket.broadcast.to(room).emit("message", generateMessage(`${username}A new user has joined!`));
+  socket.on("join", ({ username, room }, cb) => {
+    const { user, error } = addUser({ id: socket.id, username, room });
+    console.log(error);
+    if (error) {
+      return cb(error);
+    }
+
+    socket.join(user.room);
+    socket.emit("message", generateMessage(` joined the chat`,user.username));
+    socket.broadcast
+      .to(user.room)
+      .emit("message", generateMessage(`${user.username}  has joined!`,user.username));
+    cb();
   });
 
   socket.on("sendMessage", (message, callback) => {
@@ -34,23 +40,32 @@ io.on("connection", (socket) => {
     if (filter.isProfane(message)) {
       return callback("Profanity is not allowed!");
     }
+    const user = getUser(socket.id);
 
-    io.emit("message", generateMessage(message));
+    io.to(user.room).emit("message", generateMessage(message,user.username));
     callback();
   });
 
   socket.on("sendLocation", (coords, callback) => {
-    io.emit(
+    const user = getUser(socket.id);
+    io.to(user.room).emit(
       "locationMessage",
       generateLocationMessage(
-        `https://google.com/maps?q=${coords.latitude},${coords.longitude}`
+        `https://google.com/maps?q=${coords.latitude},${coords.longitude}`,user.username
       )
     );
     callback();
   });
 
   socket.on("disconnect", () => {
-    io.emit("message", generateMessage("A user has left!"));
+    const user = removeUser(socket.id);
+    console.log(user);
+    if (user) {
+      io.to(user.room).emit(
+        "message",
+        generateMessage(`${user.username} has left!`,user.username)
+      );
+    }
   });
 });
 
