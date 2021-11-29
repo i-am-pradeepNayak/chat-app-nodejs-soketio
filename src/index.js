@@ -21,17 +21,25 @@ io.on("connection", (socket) => {
   //room connection
   socket.on("join", ({ username, room }, cb) => {
     const { user, error } = addUser({ id: socket.id, username, room });
-    console.log(error);
+
     if (error) {
       return cb(error);
     }
 
     socket.join(user.room);
-    socket.emit("message", generateMessage(` joined the chat`,user.username));
+    socket.emit("message", generateMessage(` joined the chat`, user.username));
     socket.broadcast
       .to(user.room)
-      .emit("message", generateMessage(`${user.username}  has joined!`,user.username));
+      .emit(
+        "message",
+        generateMessage(`${user.username}  has joined!`, user.username)
+      );
     cb();
+
+    io.to(user.room).emit("roomData", {
+      roomName: user.room.toUpperCase(),
+      roomDetails: getUsersInRoom(user.room),
+    });
   });
 
   socket.on("sendMessage", (message, callback) => {
@@ -42,7 +50,7 @@ io.on("connection", (socket) => {
     }
     const user = getUser(socket.id);
 
-    io.to(user.room).emit("message", generateMessage(message,user.username));
+    io.to(user.room).emit("message", generateMessage(message, user.username));
     callback();
   });
 
@@ -51,7 +59,8 @@ io.on("connection", (socket) => {
     io.to(user.room).emit(
       "locationMessage",
       generateLocationMessage(
-        `https://google.com/maps?q=${coords.latitude},${coords.longitude}`,user.username
+        `https://google.com/maps?q=${coords.latitude},${coords.longitude}`,
+        user.username
       )
     );
     callback();
@@ -59,12 +68,16 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     const user = removeUser(socket.id);
-    console.log(user);
+
     if (user) {
       io.to(user.room).emit(
         "message",
-        generateMessage(`${user.username} has left!`,user.username)
+        generateMessage(`${user.username} has left!`, user.username)
       );
+      io.to(user.room).emit("roomData", {
+        roomName: user.room.toUpperCase(),
+        roomDetails: getUsersInRoom(user.room),
+      });
     }
   });
 });
